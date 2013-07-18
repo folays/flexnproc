@@ -1,5 +1,7 @@
 This module provides /proc/flexnproc which upon read() will return the number of processes owned by the current UID.
 
+It's more efficient than looping over all processes from userland, because the kernel already have this information.
+
 root@riverrun:/var/www/flexnproc# ./insert.pl 
 -> rmmod flexnproc.ko
 -> insmod flexnproc.ko verbose=1
