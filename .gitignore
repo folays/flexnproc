@@ -1,0 +1,9 @@
+*~
+flexnproc.mod.o
+flexnproc.o
+main.o
+kresolv.o
+*.cmd
+Module.symvers
+modules.order
+.tmp_versions
