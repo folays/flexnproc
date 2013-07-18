@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <dlfcn.h>
 #include <errno.h>
+#include <syslog.h>
 
 #define HOOK_LIB_PATH NULL
 #define HOOK_INIT(fname) static void *handle, (*f)(); if (!handle) handle = hook_init_ptr(&f, fname);
@@ -26,12 +27,26 @@ static void *hook_init_ptr(void (**f)(), const char *fname)
   return handle;
 }
 
+
+static int fd_flexnproc = -1;
+__attribute__((constructor)) void setuid_check_nproc_init(void)
+{
+  int fd;
+
+  fd = open("/proc/flexnproc", O_RDONLY);
+  if (dup2(fd, 777) == 777)
+    fd_flexnproc = 777;
+  close(fd);
+}
+
 int setuid(uid_t uid)
 {
   HOOK_INIT("setuid");
   int ret;
 
   ret = ((int (*)())f)(uid);
+  if (ret != 0)
+    return ret;
 
   do
     {
@@ -45,15 +60,17 @@ int setuid(uid_t uid)
       if (getrlimit(RLIMIT_NPROC, &rlim) != 0)
 	break;
 
-      if ((fd = open("/proc/flexnproc", O_RDONLY)) < 0)
+      if ((fd = fd_flexnproc) < 0)
+	fd = open("/proc/flexnproc", O_RDONLY);
+      if (fd < 0)
 	break;
 
-      if (read(fd, buf, sizeof(buf)) <= 0)
+      if (pread(fd, buf, sizeof(buf), 0) <= 0)
 	goto out_open;
 
       int cur_processes = strtoul(buf, NULL, 16);
-      printf("cur_processes : %d (RLIMIT_NPROC hard : %ld)\n",
-	     cur_processes, rlim.rlim_max);
+      /* syslog(LOG_DAEMON | LOG_CRIT, "cur_processes for uid %d : %d (RLIMIT_NPROC hard : %ld)\n", */
+      /* 	     uid, cur_processes, rlim.rlim_max); */
 
       if (cur_processes >= rlim.rlim_max)
 	{
