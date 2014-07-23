@@ -3,6 +3,7 @@
 #include <linux/init.h>		/* Needed for the macros */
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
+#include <linux/seq_file.h>
 
 #define DEBUG if(flexnproc_verbose >= 1)
 #define FLEX_PROC_ENTRY "flexnproc"
@@ -16,7 +17,7 @@ module_param_named(verbose, flexnproc_verbose, uint, 0644);
 
 struct proc_dir_entry *flex_proc;
 
-static int flex_proc_read(char *page, char **start, off_t off, int count, int *eof, void *data)
+static ssize_t __attribute__ ((unused)) flex_proc_read(char *page, char **start, off_t off, int count, int *eof, void *data)
 {
   int cur_processes;
   size_t len;
@@ -39,6 +40,30 @@ static int flex_proc_read(char *page, char **start, off_t off, int count, int *e
   return len;
 }
 
+static int flex_proc_show(struct seq_file *m, void *v)
+{
+  int cur_processes;
+
+  cur_processes = atomic_read(&current->real_cred->user->processes);
+
+  seq_printf(m, "0x%x\n", cur_processes);
+
+  return 0;
+}
+
+static int flex_proc_open(struct inode *inode, struct file *file)
+{
+  return single_open(file, flex_proc_show, NULL);
+}
+
+static const struct file_operations flexnproc_entry_operations = 
+  {
+    .owner	= THIS_MODULE,
+    .open	= flex_proc_open,
+    .read	= seq_read,
+    .release	= single_release,
+  };
+
 static int __init drop_start(void)
 {
   printk(KERN_INFO "#########################################################################################\n");
@@ -47,13 +72,11 @@ static int __init drop_start(void)
   printk(KERN_INFO "Loading flexnproc module... All your nproc are belong to us.\n");
   printk(KERN_INFO "Hello world. I will happily tell you how many processes your UID owns when you ask me.\n");
 
-  if (!(flex_proc = create_proc_entry(FLEX_PROC_ENTRY, 0444, NULL)))
+  if (!(flex_proc = proc_create(FLEX_PROC_ENTRY, 0444, NULL, &flexnproc_entry_operations)))
     {
       printk(KERN_INFO "flexnproc proc entry could not be created\n");
       return 1;
     }
-
-  flex_proc->read_proc = flex_proc_read;
 
   return 0;
 }
